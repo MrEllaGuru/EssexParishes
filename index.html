@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Parish Boundary Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; }
+        #loading { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading parish boundary...</div>
+    <div id="map"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        // Get parish name from URL
+        const params = new URLSearchParams(window.location.search);
+        const parishName = params.get('parish');
+        document.title = parishName ? `${parishName} Parish Boundary` : 'Parish Boundary Viewer';
+
+        // Initialize map
+        const map = L.map('map').setView([51.872, 0.183], 10);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        if (parishName) {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+
+            // Fetch parish boundary
+            const query = `[out:json][timeout:25];
+                area["admin_level"="4"]["name"="Essex"]->.essex;
+                (
+                    relation["boundary"="administrative"]["admin_level"="10"]["name"="${parishName}"]
+                    (area.essex);
+                );
+                out body;
+                >;
+                out skel qt;`;
+
+            fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: query
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                
+                if (data.elements.length === 0) {
+                    alert('Parish boundary not found. Please check the parish name.');
+                    return;
+                }
+
+                // Extract coordinates and create boundary
+                const nodes = {};
+                data.elements.forEach(el => {
+                    if (el.type === 'node') {
+                        nodes[el.id] = [el.lat, el.lon];
+                    }
+                });
+
+                const ways = data.elements.filter(el => el.type === 'way').map(way => {
+                    return way.nodes.map(id => nodes[id]);
+                });
+
+                // Draw boundary
+                const boundary = L.polyline(ways, {
+                    color: 'red',
+                    weight: 3
+                }).addTo(map);
+
+                // Zoom to boundary
+                map.fitBounds(boundary.getBounds());
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                alert('Error loading parish boundary. Please try again.');
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
