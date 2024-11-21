@@ -40,12 +40,13 @@
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
 
-            // Fetch parish boundary
+            // Modified query to be more flexible
             const query = `[out:json][timeout:25];
-                area["admin_level"="4"]["name"="Essex"]->.essex;
+                area["name"="Essex"]["admin_level"="4"]->.essex;
                 (
-                    relation["boundary"="administrative"]["admin_level"="10"]["name"="${parishName}"]
-                    (area.essex);
+                    relation["boundary"="administrative"]
+                           ["name"~"${parishName}"i]
+                           (area.essex);
                 );
                 out body;
                 >;
