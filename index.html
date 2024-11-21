@@ -5,7 +5,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; }
+        #map { height: 80vh; width: 100%; }
+        #debug { 
+            padding: 10px; 
+            background: #f0f0f0; 
+            font-family: monospace; 
+            max-height: 20vh;
+            overflow: auto;
+        }
         #loading { 
             position: absolute; 
             top: 50%; 
@@ -22,12 +29,20 @@
 <body>
     <div id="loading">Loading parish boundary...</div>
     <div id="map"></div>
+    <div id="debug">Debugging information will appear here...</div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script>
+        const debugDiv = document.getElementById('debug');
+        function log(message) {
+            debugDiv.innerHTML += message + '<br>';
+            console.log(message);
+        }
+
         // Get parish name from URL
         const params = new URLSearchParams(window.location.search);
         const parishName = params.get('parish');
         document.title = parishName ? `${parishName} Parish Boundary` : 'Parish Boundary Viewer';
+        log(`Looking for parish: ${parishName}`);
 
         // Initialize map
         const map = L.map('map').setView([51.872, 0.183], 10);
@@ -40,27 +55,36 @@
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
 
-            // Modified query to be more flexible
+            // Try a simpler query first
             const query = `[out:json][timeout:25];
-                area["name"="Essex"]["admin_level"="4"]->.essex;
                 (
                     relation["boundary"="administrative"]
-                           ["name"~"${parishName}"i]
-                           (area.essex);
+                           ["name"="${parishName}"];
                 );
                 out body;
                 >;
                 out skel qt;`;
 
+            log('Sending query to Overpass API...');
+            log(`Query: ${query}`);
+
             fetch('https://overpass-api.de/api/interpreter', {
                 method: 'POST',
-                body: query
+                body: query,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
             })
-            .then(response => response.json())
+            .then(response => {
+                log(`API Response status: ${response.status}`);
+                return response.json();
+            })
             .then(data => {
                 loading.style.display = 'none';
+                log(`Received data with ${data.elements.length} elements`);
                 
                 if (data.elements.length === 0) {
+                    log('No boundary found');
                     alert('Parish boundary not found. Please check the parish name.');
                     return;
                 }
@@ -77,6 +101,8 @@
                     return way.nodes.map(id => nodes[id]);
                 });
 
+                log(`Found ${Object.keys(nodes).length} nodes and ${ways.length} ways`);
+
                 // Draw boundary
                 const boundary = L.polyline(ways, {
                     color: 'red',
@@ -85,9 +111,11 @@
 
                 // Zoom to boundary
                 map.fitBounds(boundary.getBounds());
+                log('Map drawn successfully');
             })
             .catch(error => {
                 loading.style.display = 'none';
+                log(`Error: ${error.message}`);
                 alert('Error loading parish boundary. Please try again.');
                 console.error('Error:', error);
             });
